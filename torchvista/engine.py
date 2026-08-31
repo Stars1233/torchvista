@@ -779,6 +779,11 @@ def process_graph(model, inputs, adj_list, module_info, func_info, node_to_modul
         restore_modules()
         for tensor in input_tensors:
             cleanup_tensor_attributes(tensor)
+        # Parameters used directly in traced operations are tagged with a
+        # graph-local source name. Remove it so the same model instance can be
+        # traced again without referring to nodes from the previous graph.
+        for parameter in model.parameters():
+            cleanup_tensor_attributes(parameter)
         # Clean up model buffers that may have been tagged during tracing
         # (e.g., BatchNorm's num_batches_tracked gets tagged by in-place add_)
         for buffer in model.buffers():

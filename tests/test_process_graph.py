@@ -307,6 +307,17 @@ class TestProcessGraphParameterNode:
         [mul] = nodes_named(state, "mul")
         assert edge_targets(state, param) == [mul]
 
+    def test_same_model_instance_can_be_traced_twice(self):
+        model = self.Model().eval()
+
+        first_state = trace(model, torch.randn(1, 4))
+        assert not hasattr(model.scale, "_tensor_source_name")
+
+        second_state = trace(model, torch.randn(1, 4))
+        assert len(nodes_of_type(first_state, "Parameter")) == 1
+        assert len(nodes_of_type(second_state, "Parameter")) == 1
+        assert not hasattr(model.scale, "_tensor_source_name")
+
 
 # Module-scope helpers for nested-hierarchy test — easier to reference by name
 # in assertions than nested classes.
