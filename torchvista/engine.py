@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import torch
 import torch.nn as nn
 import torch.overrides
@@ -14,6 +16,49 @@ from .graph_transforms import (
     inject_modulelist_containers,
     compress_nested_graph,
 )
+
+
+def supports_force_eager():
+    """Return whether PyTorch can force compiled callables to run eagerly."""
+    compiler = getattr(torch, "compiler", None)
+    return getattr(compiler, "set_stance", None) is not None
+
+
+def contains_compiled_callables(model):
+    """Best-effort detection of torch.compile wrappers within a model."""
+    def is_compiled(value):
+        return (
+            hasattr(value, "_torchdynamo_orig_callable")
+            or hasattr(value, "_orig_mod")
+        )
+
+    if is_compiled(model):
+        return True
+
+    if not isinstance(model, nn.Module):
+        return False
+
+    for module in model.modules():
+        if is_compiled(module):
+            return True
+        for value in vars(module).values():
+            if is_compiled(value):
+                return True
+            if isinstance(value, dict):
+                if any(is_compiled(item) for item in value.values()):
+                    return True
+            elif isinstance(value, (list, tuple, set)):
+                if any(is_compiled(item) for item in value):
+                    return True
+
+    return False
+
+
+def _force_eager_context():
+    """Force compiled callables to run eagerly when the PyTorch API exists."""
+    if not supports_force_eager():
+        return nullcontext()
+    return torch.compiler.set_stance("force_eager")
 
 
 def process_graph(model, inputs, adj_list, module_info, func_info, node_to_module_path, parent_module_to_nodes, parent_module_to_depth, graph_node_name_to_without_suffix, graph_node_display_names, node_to_ancestors, repeat_containers, node_to_attr_name, show_non_gradient_nodes, forced_module_tracing_depth, show_module_attr_names=False, show_compressed_view=False):
@@ -687,7 +732,7 @@ def process_graph(model, inputs, adj_list, module_info, func_info, node_to_modul
 
         exception = None
         trace_mode = make_trace_mode()
-        with torch.no_grad(), trace_mode:
+        with torch.no_grad(), trace_mode, _force_eager_context():
             output = model(*inputs) if isinstance(inputs, tuple) else model(inputs)
             # Check if output is a dict to use keys as names
             if isinstance(output, dict):

@@ -1,36 +1,31 @@
+import importlib
+import inspect
+import pkgutil
 import warnings
 
 from .overrides import CONTAINER_MODULES
 
 
+def _import_optional_package(package_name):
+    try:
+        return importlib.import_module(package_name)
+    except ImportError:
+        return None
+    except Exception:
+        print(
+            f"[warning] {package_name} is available, but its import failed, so torchvista "
+            f"cannot discover {package_name} modules. If you need {package_name} tracing, "
+            f"run `import {package_name}` separately to debug what is wrong."
+        )
+        return None
+
+
 def get_all_nn_modules():
-    import inspect
-    import pkgutil
-    import importlib
     import torch.nn as nn
 
-    try:
-        import torchvision
-    except ImportError:
-        torchvision = None
-    
-    try:
-        import torchaudio
-    except ImportError:
-        torchaudio = None
-    except Exception:
-        print('[warning] torchaudio available, but import failed and hence torchvista cannot trace torchaudio operations.\
-               If you need torchaudio tracing, run `import torchaudio` separately to debug what is wrong.')
-        torchaudio = None
-    
-    try:
-        import torchtext
-    except ImportError:
-        torchtext = None
-    except Exception:
-        print('[warning] torchtext available, but import failed and hence torchvista cannot trace torchtext operations.\
-               If you need torchtext tracing, run `import torchtext` separately to debug what is wrong.')
-        torchtext = None
+    torchvision = _import_optional_package("torchvision")
+    torchaudio = _import_optional_package("torchaudio")
+    torchtext = _import_optional_package("torchtext")
 
     modules_to_scan = [nn, torchvision, torchaudio, torchtext]
 
@@ -64,7 +59,7 @@ def get_all_nn_modules():
 
     return module_classes
 
+
 with warnings.catch_warnings():
     warnings.simplefilter("ignore", UserWarning)
     MODULES = get_all_nn_modules() - CONTAINER_MODULES
-

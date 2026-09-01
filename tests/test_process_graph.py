@@ -4,6 +4,9 @@ Each TestProcessGraph* class is one model + a few focused assertions on the
 resulting adjacency list / module_info / etc. The trace() helper in
 tests/_helpers.py wraps process_graph's 16-arg positional API.
 """
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import torch
 import torch.nn as nn
 
@@ -317,6 +320,35 @@ class TestProcessGraphParameterNode:
         assert len(nodes_of_type(first_state, "Parameter")) == 1
         assert len(nodes_of_type(second_state, "Parameter")) == 1
         assert not hasattr(model.scale, "_tensor_source_name")
+
+
+class TestProcessGraphCompilerStance:
+    def test_force_eager_stance_is_active_during_forward(self, monkeypatch):
+        stance_active = False
+
+        @contextmanager
+        def fake_set_stance(stance):
+            nonlocal stance_active
+            assert stance == "force_eager"
+            stance_active = True
+            try:
+                yield
+            finally:
+                stance_active = False
+
+        compiler = getattr(torch, "compiler", None)
+        if compiler is None:
+            compiler = SimpleNamespace()
+            monkeypatch.setattr(torch, "compiler", compiler, raising=False)
+        monkeypatch.setattr(compiler, "set_stance", fake_set_stance, raising=False)
+
+        class Model(nn.Module):
+            def forward(self, x):
+                assert stance_active
+                return x + 1
+
+        trace(Model().eval(), torch.randn(1, 4))
+        assert not stance_active
 
 
 # Module-scope helpers for nested-hierarchy test — easier to reference by name

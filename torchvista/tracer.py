@@ -4,7 +4,7 @@ from collections import defaultdict
 import torch
 
 from .enums import ExportFormat
-from .engine import process_graph
+from .engine import contains_compiled_callables, process_graph, supports_force_eager
 from .graph_transforms import build_immediate_ancestor_map
 from .render import plot_graph, validate_export_format
 
@@ -46,6 +46,17 @@ def trace_model(model, inputs, show_non_gradient_nodes=True, collapse_modules_af
             "which can mutate stateful layers (e.g. BatchNorm running stats) and trigger "
             "stochastic behavior (e.g. Dropout). Call model.eval() before tracing to avoid "
             "these side effects.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    if not supports_force_eager() and contains_compiled_callables(model):
+        warnings.warn(
+            "trace_model: the model contains torch.compile-wrapped callables, but this "
+            "PyTorch version cannot force eager execution during tracing. The visualization "
+            "may be incomplete or contain disconnected nodes. Upgrade PyTorch to a version "
+            "that provides torch.compiler.set_stance() or trace an uncompiled version of "
+            "the model.",
             UserWarning,
             stacklevel=2,
         )
