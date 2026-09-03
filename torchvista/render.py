@@ -1,5 +1,6 @@
 import json
 import uuid
+import torch
 from collections import defaultdict
 from pathlib import Path
 from string import Template
@@ -193,4 +194,3 @@ def validate_export_format(export_format):
         )
     
     return ExportFormat(export_format)
-
